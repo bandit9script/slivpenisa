@@ -1,0 +1,917 @@
+local Players = game:GetService("Players")
+local me = Players.LocalPlayer
+local UIS = game:GetService("UserInputService")
+local Lighting = game:GetService("Lighting")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+
+local ESPEnabled = false
+local ChamsEnabled = false
+local ChamsType = "Classic"
+local TeamCheckOn = false
+local NightModeEnabled = false
+local HitboxEnabled = false
+local HitboxSize = 3
+
+local ESPStorage = {}
+local ChamsStorage = {}
+local connections = {}
+local originalHeadSizes = {}
+
+local rainbowTime = 0
+local lastUpdateTime = 0
+local UPDATE_INTERVAL = 0.3
+
+local blur = Instance.new("BlurEffect")
+blur.Size = 10
+blur.Enabled = false
+blur.Parent = Lighting
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "GlassUI"
+gui.ResetOnSpawn = false
+gui.Enabled = false
+gui.Parent = me:WaitForChild("PlayerGui")
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.fromScale(0.32, 0.35)
+frame.Position = UDim2.fromScale(0.5, 0.5)
+frame.AnchorPoint = Vector2.new(0.5, 0.5)
+frame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+frame.BackgroundTransparency = 0.94
+frame.Parent = gui
+
+local frameCorner = Instance.new("UICorner")
+frameCorner.CornerRadius = UDim.new(0, 8)
+frameCorner.Parent = frame
+
+local gradient = Instance.new("UIGradient")
+gradient.Rotation = 90
+gradient.Color = ColorSequence.new{
+ ColorSequenceKeypoint.new(0, Color3.fromRGB(255,255,255)),
+ ColorSequenceKeypoint.new(1, Color3.fromRGB(230,240,255))
+}
+gradient.Transparency = NumberSequence.new{
+ NumberSequenceKeypoint.new(0, 0.9),
+ NumberSequenceKeypoint.new(1, 0.96)
+}
+gradient.Parent = frame
+
+local stroke = Instance.new("UIStroke")
+stroke.Thickness = 0.8
+stroke.Color = Color3.fromRGB(255,255,255)
+stroke.Transparency = 0.8
+stroke.Parent = frame
+
+local leftPanel = Instance.new("Frame")
+leftPanel.Size = UDim2.fromScale(0.22, 0.75)
+leftPanel.Position = UDim2.fromScale(0.04, 0.1)
+leftPanel.BackgroundTransparency = 1
+leftPanel.Parent = frame
+
+local divider = Instance.new("Frame")
+divider.Size = UDim2.new(0, 0.4, 0.7, 0)
+divider.Position = UDim2.fromScale(0.28, 0.15)
+divider.BackgroundColor3 = Color3.fromRGB(255,255,255)
+divider.BackgroundTransparency = 0.85
+divider.Parent = frame
+
+local function createCategoryButton(name, position)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.fromScale(0.9, 0.18)
+    btn.Position = UDim2.fromScale(0, position)
+    btn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    btn.BackgroundTransparency = 0.9
+    btn.Text = ""
+    btn.TextColor3 = Color3.fromRGB(25, 25, 45)
+    btn.TextSize = 10
+    btn.Font = Enum.Font.GothamMedium
+    btn.Parent = leftPanel
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = btn
+    
+    local btnStroke = Instance.new("UIStroke")
+    btnStroke.Thickness = 0.6
+    btnStroke.Color = Color3.fromRGB(200, 210, 255)
+    btnStroke.Transparency = 0.7
+    btnStroke.Parent = btn
+    
+    return btn, btnStroke
+end
+
+local espCatBtn, espCatStroke = createCategoryButton("", 0.05)
+local atmCatBtn, atmCatStroke = createCategoryButton("", 0.28)
+local hitboxCatBtn, hitboxCatStroke = createCategoryButton("", 0.51)
+
+local rightPanel = Instance.new("Frame")
+rightPanel.Size = UDim2.fromScale(0.6, 0.75)
+rightPanel.Position = UDim2.fromScale(0.33, 0.1)
+rightPanel.BackgroundTransparency = 1
+rightPanel.Parent = frame
+
+local function createOptionsFrame(name)
+    local options = Instance.new("Frame")
+    options.Size = UDim2.fromScale(1, 1)
+    options.BackgroundTransparency = 1
+    options.Visible = false
+    options.Name = name .. "Options"
+    options.Parent = rightPanel
+    return options
+end
+
+local function createToggleButton(parent, name, variable, position)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.fromScale(0.8, 0.2)
+    btn.Position = UDim2.fromScale(0.05, position)
+    
+    if variable then
+        btn.BackgroundColor3 = Color3.fromRGB(180, 255, 180)
+    else
+        btn.BackgroundColor3 = Color3.fromRGB(255, 180, 180)
+    end
+    
+    btn.BackgroundTransparency = 0.84
+    btn.Text = ""
+    btn.TextColor3 = Color3.fromRGB(25, 25, 45)
+    btn.TextSize = 11
+    btn.Font = Enum.Font.Gotham
+    btn.Parent = parent
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 5)
+    corner.Parent = btn
+    
+    local btnStroke = Instance.new("UIStroke")
+    btnStroke.Thickness = 0.6
+    
+    if variable then
+        btnStroke.Color = Color3.fromRGB(100, 255, 100)
+    else
+        btnStroke.Color = Color3.fromRGB(255, 100, 100)
+    end
+    
+    btnStroke.Transparency = 0.45
+    btnStroke.Parent = btn
+    
+    return btn, btnStroke
+end
+
+local espOptions = createOptionsFrame("ESP")
+local atmOptions = createOptionsFrame("Atm")
+local hitboxOptions = createOptionsFrame("Hitbox")
+
+local espToggle, espToggleStroke = createToggleButton(espOptions, "", ESPEnabled, 0.05)
+local chamsToggle, chamsToggleStroke = createToggleButton(espOptions, "", ChamsEnabled, 0.3)
+local teamToggle, teamToggleStroke = createToggleButton(espOptions, "", TeamCheckOn, 0.55)
+
+local nightToggle, nightToggleStroke = createToggleButton(atmOptions, "", NightModeEnabled, 0.05)
+
+local hitboxToggle, hitboxToggleStroke = createToggleButton(hitboxOptions, "", HitboxEnabled, 0.05)
+
+local chamsTypeWindow = Instance.new("Frame")
+chamsTypeWindow.Size = UDim2.fromScale(0.25, 0.25)
+chamsTypeWindow.Position = UDim2.fromScale(0.5, 0.5)
+chamsTypeWindow.AnchorPoint = Vector2.new(0.5, 0.5)
+chamsTypeWindow.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+chamsTypeWindow.BackgroundTransparency = 0.9
+chamsTypeWindow.Visible = false
+chamsTypeWindow.ZIndex = 10
+chamsTypeWindow.Parent = gui
+
+local windowCorner = Instance.new("UICorner")
+windowCorner.CornerRadius = UDim.new(0, 8)
+windowCorner.Parent = chamsTypeWindow
+
+local windowStroke = Instance.new("UIStroke")
+windowStroke.Thickness = 1
+windowStroke.Color = Color3.fromRGB(200, 210, 255)
+windowStroke.Transparency = 0.5
+windowStroke.Parent = chamsTypeWindow
+
+local classicChamsBtn
+local rainbowChamsBtn
+
+local function createChamsTypeButton(name, type, positionY)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.fromScale(0.9, 0.4)
+    btn.Position = UDim2.fromScale(0.05, positionY)
+    
+    if ChamsType == type then
+        btn.BackgroundColor3 = Color3.fromRGB(180, 255, 180)
+        btn.Text = ""
+    else
+        btn.BackgroundColor3 = Color3.fromRGB(220, 220, 220)
+        btn.Text = ""
+    end
+    
+    btn.BackgroundTransparency = 0.85
+    btn.TextColor3 = Color3.fromRGB(25, 25, 45)
+    btn.TextSize = 11
+    btn.Font = Enum.Font.Gotham
+    btn.ZIndex = 11
+    btn.Parent = chamsTypeWindow
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 5)
+    corner.Parent = btn
+    
+    local btnStroke = Instance.new("UIStroke")
+    btnStroke.Thickness = 0.6
+    
+    if ChamsType == type then
+        btnStroke.Color = Color3.fromRGB(100, 255, 100)
+    else
+        btnStroke.Color = Color3.fromRGB(180, 180, 180)
+    end
+    
+    btnStroke.Transparency = 0.5
+    btnStroke.ZIndex = 11
+    btnStroke.Parent = btn
+    
+    btn.MouseButton1Click:Connect(function()
+        ChamsType = type
+        chamsTypeWindow.Visible = false
+    end)
+    
+    return btn
+end
+
+local currentCategory = "ESP"
+
+local function selectCategory(category)
+    currentCategory = category
+    
+    espOptions.Visible = false
+    atmOptions.Visible = false
+    hitboxOptions.Visible = false
+    
+    espCatBtn.BackgroundTransparency = 0.9
+    espCatStroke.Transparency = 0.7
+    espCatBtn.TextColor3 = Color3.fromRGB(25, 25, 45)
+    
+    atmCatBtn.BackgroundTransparency = 0.9
+    atmCatStroke.Transparency = 0.7
+    atmCatBtn.TextColor3 = Color3.fromRGB(25, 25, 45)
+    
+    hitboxCatBtn.BackgroundTransparency = 0.9
+    hitboxCatStroke.Transparency = 0.7
+    hitboxCatBtn.TextColor3 = Color3.fromRGB(25, 25, 45)
+    
+    if category == "ESP" then
+        espOptions.Visible = true
+        espCatBtn.BackgroundTransparency = 0.8
+        espCatStroke.Transparency = 0.4
+        espCatBtn.TextColor3 = Color3.fromRGB(5, 5, 25)
+        
+    elseif category == "ATMOSPHERE" then
+        atmOptions.Visible = true
+        atmCatBtn.BackgroundTransparency = 0.8
+        atmCatStroke.Transparency = 0.4
+        atmCatBtn.TextColor3 = Color3.fromRGB(5, 5, 25)
+        
+    elseif category == "HITBOX" then
+        hitboxOptions.Visible = true
+        hitboxCatBtn.BackgroundTransparency = 0.8
+        hitboxCatStroke.Transparency = 0.4
+        hitboxCatBtn.TextColor3 = Color3.fromRGB(5, 5, 25)
+    end
+end
+
+espCatBtn.MouseButton1Click:Connect(function()
+    selectCategory("ESP")
+end)
+
+atmCatBtn.MouseButton1Click:Connect(function()
+    selectCategory("ATMOSPHERE")
+end)
+
+hitboxCatBtn.MouseButton1Click:Connect(function()
+    selectCategory("HITBOX")
+end)
+
+selectCategory("ESP")
+
+local function getPlayers()
+    local players = {}
+    
+    for i, p in pairs(Players:GetPlayers()) do
+        if p ~= me then
+            if p.Character then
+                table.insert(players, {
+                    name = p.Name,
+                    model = p.Character,
+                    player = p
+                })
+            end
+        end
+    end
+    
+    return players
+end
+
+local function getTeam(model, playerObj)
+    if not model then return "Unknown" end
+    
+    if model.Parent then
+        if model.Parent.Name == "Counter-Terrorists" then return "Counter-Terrorists" end
+        if model.Parent.Name == "Terrorists" then return "Terrorists" end
+    end
+    
+    if model:FindFirstChild("Team") then
+        return model.Team.Value
+    end
+    
+    if playerObj and playerObj.Team then
+        return playerObj.Team.Name
+    end
+    
+    return "Unknown"
+end
+
+local function getClassicColor(model, playerObj)
+    local team = getTeam(model, playerObj)
+    
+    if TeamCheckOn then
+        local myTeam = getTeam(me.Character, me)
+        if myTeam ~= "Unknown" and team ~= "Unknown" then
+            if myTeam == team then
+                return Color3.fromRGB(60, 160, 255)
+            else
+                return Color3.fromRGB(255, 70, 70)
+            end
+        end
+    end
+    
+    return Color3.fromRGB(255, 70, 70)
+end
+
+local function getRainbowColor(index)
+    local hue = (tick() * 0.5 + index * 0.3) % 1
+    return Color3.fromHSV(hue, 0.8, 1)
+end
+
+local function getChamsColor(model, playerObj, playerIndex)
+    if ChamsType == "Rainbow" then
+        return getRainbowColor(playerIndex or 0)
+    else
+        return getClassicColor(model, playerObj)
+    end
+end
+
+local function shouldShowPlayer(playerInfo)
+    local show = true
+    
+    if TeamCheckOn then
+        local myTeam = getTeam(me.Character, me)
+        local enemyTeam = getTeam(playerInfo.model, playerInfo.player)
+        
+        if myTeam ~= "Unknown" and enemyTeam ~= "Unknown" then
+            show = myTeam ~= enemyTeam
+        end
+    end
+    
+    return show
+end
+
+local function clearESP()
+    for name, obj in pairs(ESPStorage) do
+        if obj and obj.Parent then
+            obj:Destroy()
+        end
+    end
+    ESPStorage = {}
+    
+    for i, conn in pairs(connections) do
+        if conn then
+            conn:Disconnect()
+        end
+    end
+    connections = {}
+end
+
+local function createPlayerESP(playerInfo)
+    local name = playerInfo.name
+    local model = playerInfo.model
+    
+    if not model then return end
+    
+    if ESPStorage[name] then
+        ESPStorage[name]:Destroy()
+        ESPStorage[name] = nil
+    end
+    
+    if ESPStorage[name .. "_info"] then
+        ESPStorage[name .. "_info"]:Destroy()
+        ESPStorage[name .. "_info"] = nil
+    end
+    
+    local espColor = getClassicColor(model, playerInfo.player)
+    
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "H"
+    highlight.FillColor = espColor
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    highlight.FillTransparency = 0.5
+    highlight.OutlineTransparency = 0
+    
+    local function attach()
+        if not model or not model.Parent then return end
+        local root = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Head")
+        
+        if root then
+            highlight.Adornee = model
+            highlight.Parent = model
+            ESPStorage[name] = highlight
+        else
+            wait(0.2)
+            attach()
+        end
+    end
+    
+    attach()
+    
+    local info = Instance.new("BillboardGui")
+    info.Name = "I"
+    info.AlwaysOnTop = true
+    info.Size = UDim2.new(0, 180, 0, 35)
+    info.StudsOffset = Vector3.new(0, 2.5, 0)
+    
+    local text = Instance.new("TextLabel")
+    text.Size = UDim2.new(1, 0, 1, 0)
+    text.BackgroundTransparency = 1
+    text.TextColor3 = espColor
+    text.TextSize = 13
+    text.Font = Enum.Font.Gotham
+    text.TextStrokeTransparency = 0.5
+    text.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    text.Text = ""
+    text.Parent = info
+    
+    local function attachInfo()
+        if not model or not model.Parent then return end
+        local head = model:FindFirstChild("Head") or model:FindFirstChild("HumanoidRootPart")
+        
+        if head then
+            info.Adornee = head
+            info.Parent = head
+            ESPStorage[name .. "_info"] = info
+        else
+            wait(0.2)
+            attachInfo()
+        end
+    end
+    
+    attachInfo()
+    
+    local conn = RunService.Heartbeat:Connect(function()
+        if not ESPEnabled then
+            conn:Disconnect()
+            return
+        end
+        
+        if not model or not model.Parent then
+            if highlight and highlight.Parent then highlight:Destroy() end
+            if info and info.Parent then info:Destroy() end
+            conn:Disconnect()
+            return
+        end
+        
+        if me.Character then
+            local myRoot = me.Character:FindFirstChild("HumanoidRootPart")
+            local enemyRoot = model:FindFirstChild("HumanoidRootPart")
+            
+            if myRoot and enemyRoot and text then
+                local dist = math.floor((myRoot.Position - enemyRoot.Position).Magnitude)
+                text.Text = ""
+                
+                local humanoid = model:FindFirstChild("Humanoid")
+                if humanoid and humanoid.Health <= 0 then
+                    text.TextColor3 = Color3.fromRGB(100, 100, 100)
+                    if highlight then
+                        highlight.FillColor = Color3.fromRGB(100, 100, 100)
+                    end
+                else
+                    text.TextColor3 = espColor
+                    if highlight then
+                        highlight.FillColor = espColor
+                    end
+                end
+            end
+        end
+    end)
+    
+    table.insert(connections, conn)
+end
+
+local function updateESP()
+    if not ESPEnabled then return end
+    
+    local players = getPlayers()
+    local shown = {}
+    
+    for i, playerInfo in pairs(players) do
+        local name = playerInfo.name
+        
+        if shouldShowPlayer(playerInfo) then
+            if not ESPStorage[name] then
+                createPlayerESP(playerInfo)
+            end
+            shown[name] = true
+        else
+            if ESPStorage[name] then
+                ESPStorage[name]:Destroy()
+                ESPStorage[name] = nil
+            end
+            if ESPStorage[name .. "_info"] then
+                ESPStorage[name .. "_info"]:Destroy()
+                ESPStorage[name .. "_info"] = nil
+            end
+        end
+    end
+    
+    for name in pairs(ESPStorage) do
+        if not shown[name:gsub("_info", "")] then
+            if ESPStorage[name] then
+                ESPStorage[name]:Destroy()
+                ESPStorage[name] = nil
+            end
+        end
+    end
+end
+
+local function clearChams()
+    for name, chamData in pairs(ChamsStorage) do
+        if chamData and chamData.highlight and chamData.highlight.Parent then
+            chamData.highlight:Destroy()
+        end
+    end
+    ChamsStorage = {}
+end
+
+local function createChamsForPlayer(playerInfo, index)
+    local name = playerInfo.name
+    local model = playerInfo.model
+    
+    if not model then return end
+    
+    if ChamsStorage[name] then
+        if ChamsStorage[name].highlight and ChamsStorage[name].highlight.Parent then
+            ChamsStorage[name].highlight:Destroy()
+        end
+        ChamsStorage[name] = nil
+    end
+    
+    local chamsColor = getChamsColor(model, playerInfo.player, index)
+    
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "C_" .. name
+    highlight.FillColor = chamsColor
+    highlight.OutlineColor = chamsColor
+    highlight.FillTransparency = 0.3
+    highlight.OutlineTransparency = 0
+    
+    local function attach()
+        if not model or not model.Parent then return end
+        local root = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Head")
+        
+        if root then
+            highlight.Adornee = model
+            highlight.Parent = model
+            ChamsStorage[name] = {
+                highlight = highlight,
+                model = model,
+                player = playerInfo.player,
+                index = index
+            }
+        else
+            wait(0.2)
+            attach()
+        end
+    end
+    
+    attach()
+end
+
+local function updateChams()
+    if not ChamsEnabled then return end
+    
+    local players = getPlayers()
+    local shown = {}
+    
+    for i, playerInfo in pairs(players) do
+        local name = playerInfo.name
+        
+        if shouldShowPlayer(playerInfo) then
+            if not ChamsStorage[name] then
+                createChamsForPlayer(playerInfo, i)
+            end
+            shown[name] = true
+        else
+            if ChamsStorage[name] then
+                if ChamsStorage[name].highlight and ChamsStorage[name].highlight.Parent then
+                    ChamsStorage[name].highlight:Destroy()
+                end
+                ChamsStorage[name] = nil
+            end
+        end
+    end
+    
+    for name in pairs(ChamsStorage) do
+        if not shown[name] then
+            if ChamsStorage[name] and ChamsStorage[name].highlight then
+                ChamsStorage[name].highlight:Destroy()
+            end
+            ChamsStorage[name] = nil
+        end
+    end
+end
+
+local function updateHitboxes()
+    local players = getPlayers()
+    
+    for i, playerInfo in pairs(players) do
+        local name = playerInfo.name
+        local model = playerInfo.model
+        
+        if model then
+            local head = model:FindFirstChild("Head")
+            if head then
+                if not originalHeadSizes[name] then
+                    originalHeadSizes[name] = head.Size
+                end
+                
+                local shouldApply = HitboxEnabled and shouldShowPlayer(playerInfo)
+                
+                if shouldApply then
+                    head.Size = Vector3.new(HitboxSize, HitboxSize, HitboxSize)
+                else
+                    local originalSize = originalHeadSizes[name]
+                    if originalSize then
+                        head.Size = originalSize
+                    end
+                end
+            end
+        end
+    end
+end
+
+local function restoreAllHitboxes()
+    for name, originalSize in pairs(originalHeadSizes) do
+        local playerObj = Players:FindFirstChild(name)
+        if playerObj and playerObj.Character then
+            local head = playerObj.Character:FindFirstChild("Head")
+            if head and originalSize then
+                head.Size = originalSize
+            end
+        end
+    end
+    originalHeadSizes = {}
+end
+
+local function updateToggleAppearance()
+    if ESPEnabled then
+        espToggle.BackgroundColor3 = Color3.fromRGB(180, 255, 180)
+        espToggleStroke.Color = Color3.fromRGB(100, 255, 100)
+    else
+        espToggle.BackgroundColor3 = Color3.fromRGB(255, 180, 180)
+        espToggleStroke.Color = Color3.fromRGB(255, 100, 100)
+    end
+    
+    if ChamsEnabled then
+        chamsToggle.BackgroundColor3 = Color3.fromRGB(180, 255, 180)
+        chamsToggleStroke.Color = Color3.fromRGB(100, 255, 100)
+    else
+        chamsToggle.BackgroundColor3 = Color3.fromRGB(255, 180, 180)
+        chamsToggleStroke.Color = Color3.fromRGB(255, 100, 100)
+    end
+    
+    if TeamCheckOn then
+        teamToggle.BackgroundColor3 = Color3.fromRGB(180, 255, 180)
+        teamToggleStroke.Color = Color3.fromRGB(100, 255, 100)
+    else
+        teamToggle.BackgroundColor3 = Color3.fromRGB(255, 180, 180)
+        teamToggleStroke.Color = Color3.fromRGB(255, 100, 100)
+    end
+    
+    if NightModeEnabled then
+        nightToggle.BackgroundColor3 = Color3.fromRGB(180, 255, 180)
+        nightToggleStroke.Color = Color3.fromRGB(100, 255, 100)
+    else
+        nightToggle.BackgroundColor3 = Color3.fromRGB(255, 180, 180)
+        nightToggleStroke.Color = Color3.fromRGB(255, 100, 100)
+    end
+    
+    if HitboxEnabled then
+        hitboxToggle.BackgroundColor3 = Color3.fromRGB(180, 255, 180)
+        hitboxToggleStroke.Color = Color3.fromRGB(100, 255, 100)
+    else
+        hitboxToggle.BackgroundColor3 = Color3.fromRGB(255, 180, 180)
+        hitboxToggleStroke.Color = Color3.fromRGB(255, 100, 100)
+    end
+end
+
+local function updateChamsTypeWindow()
+    if classicChamsBtn and rainbowChamsBtn then
+        if ChamsType == "Classic" then
+            classicChamsBtn.BackgroundColor3 = Color3.fromRGB(180, 255, 180)
+            classicChamsBtn.Text = ""
+            rainbowChamsBtn.BackgroundColor3 = Color3.fromRGB(220, 220, 220)
+            rainbowChamsBtn.Text = ""
+        else
+            classicChamsBtn.BackgroundColor3 = Color3.fromRGB(220, 220, 220)
+            classicChamsBtn.Text = ""
+            rainbowChamsBtn.BackgroundColor3 = Color3.fromRGB(180, 255, 180)
+            rainbowChamsBtn.Text = ""
+        end
+    end
+end
+
+espToggle.MouseButton1Click:Connect(function()
+    ESPEnabled = not ESPEnabled
+    
+    if ESPEnabled then
+        updateESP()
+    else
+        clearESP()
+    end
+    
+    updateToggleAppearance()
+end)
+
+chamsToggle.MouseButton1Click:Connect(function()
+    ChamsEnabled = not ChamsEnabled
+    
+    if ChamsEnabled then
+        updateChams()
+    else
+        clearChams()
+    end
+    
+    updateToggleAppearance()
+end)
+
+chamsToggle.MouseButton2Click:Connect(function()
+    chamsTypeWindow.Visible = not chamsTypeWindow.Visible
+    updateChamsTypeWindow()
+end)
+
+teamToggle.MouseButton1Click:Connect(function()
+    TeamCheckOn = not TeamCheckOn
+    updateESP()
+    updateChams()
+    updateHitboxes()
+    updateToggleAppearance()
+end)
+
+nightToggle.MouseButton1Click:Connect(function()
+    NightModeEnabled = not NightModeEnabled
+    
+    if NightModeEnabled then
+        Lighting.ClockTime = 24
+        Lighting.Brightness = 0.1
+        Lighting.OutdoorAmbient = Color3.fromRGB(30, 30, 60)
+        Lighting.Ambient = Color3.fromRGB(30, 30, 60)
+    else
+        Lighting.ClockTime = 14
+        Lighting.Brightness = 1
+        Lighting.OutdoorAmbient = Color3.fromRGB(128, 128, 128)
+        Lighting.Ambient = Color3.fromRGB(128, 128, 128)
+    end
+    
+    updateToggleAppearance()
+end)
+
+hitboxToggle.MouseButton1Click:Connect(function()
+    HitboxEnabled = not HitboxEnabled
+    
+    if HitboxEnabled then
+        updateHitboxes()
+    else
+        restoreAllHitboxes()
+    end
+    
+    updateToggleAppearance()
+end)
+
+classicChamsBtn = createChamsTypeButton("", "Classic", 0.05)
+rainbowChamsBtn = createChamsTypeButton("", "Rainbow", 0.55)
+
+updateChamsTypeWindow()
+updateToggleAppearance()
+
+local function reconnectAllFeatures()
+    local currentChamsType = ChamsType
+    
+    clearChams()
+    
+    if NightModeEnabled then
+        Lighting.ClockTime = 24
+        Lighting.Brightness = 0.1
+        Lighting.OutdoorAmbient = Color3.fromRGB(30, 30, 60)
+        Lighting.Ambient = Color3.fromRGB(30, 30, 60)
+    end
+    
+    if ESPEnabled then
+        clearESP()
+        wait(0.2)
+        updateESP()
+    end
+    
+    if ChamsEnabled then
+        wait(0.3)
+        updateChams()
+    end
+    
+    if HitboxEnabled then
+        wait(0.4)
+        updateHitboxes()
+    end
+end
+
+RunService.Heartbeat:Connect(function()
+    local currentTime = tick()
+    
+    if ChamsEnabled and ChamsType == "Rainbow" then
+        rainbowTime = rainbowTime + 0.02
+        
+        for name, chamData in pairs(ChamsStorage) do
+            if chamData and chamData.highlight and chamData.highlight.Parent then
+                local rainbowColor = getRainbowColor(chamData.index or 0)
+                chamData.highlight.FillColor = rainbowColor
+                chamData.highlight.OutlineColor = rainbowColor
+            end
+        end
+    end
+    
+    if currentTime - lastUpdateTime >= UPDATE_INTERVAL then
+        lastUpdateTime = currentTime
+        
+        if NightModeEnabled then
+            Lighting.ClockTime = 24
+            Lighting.Brightness = 0.1
+            Lighting.OutdoorAmbient = Color3.fromRGB(30, 30, 60)
+            Lighting.Ambient = Color3.fromRGB(30, 30, 60)
+        end
+        
+        if ESPEnabled then
+            updateESP()
+        end
+        
+        if ChamsEnabled then
+            updateChams()
+        end
+        
+        if HitboxEnabled then
+            updateHitboxes()
+        end
+    end
+end)
+
+local function onPlayerAdded(plr)
+    plr.CharacterAdded:Connect(function()
+        wait(1)
+        reconnectAllFeatures()
+    end)
+end
+
+local function onPlayerRemoving()
+    wait(0.5)
+    reconnectAllFeatures()
+end
+
+for i, plr in pairs(Players:GetPlayers()) do
+    if plr ~= me then
+        onPlayerAdded(plr)
+    end
+end
+
+Players.PlayerAdded:Connect(onPlayerAdded)
+Players.PlayerRemoving:Connect(onPlayerRemoving)
+
+me.CharacterAdded:Connect(function()
+    wait(1)
+    reconnectAllFeatures()
+end)
+
+UIS.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    
+    if input.KeyCode == Enum.KeyCode.RightControl then
+        gui.Enabled = not gui.Enabled
+        blur.Enabled = gui.Enabled
+        chamsTypeWindow.Visible = false
+    end
+end)
+
+Players.PlayerRemoving:Connect(function(leavingPlayer)
+    if leavingPlayer == me then
+        restoreAllHitboxes()
+        clearChams()
+        clearESP()
+    end
+end)
+
+wait(2)
+reconnectAllFeatures()
